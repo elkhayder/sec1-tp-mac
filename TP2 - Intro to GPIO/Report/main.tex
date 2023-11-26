@@ -1,0 +1,509 @@
+\documentclass{article}
+\usepackage{graphicx} % Required for inserting images
+\usepackage{float} % For figures placement
+\usepackage{fancyvrb} % for \Verb
+\usepackage[a4paper, margin=2.5cm]{geometry}
+\usepackage{karnaugh-map} % Tableau de Karnaugh
+% Subfigures
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{multicol}
+
+\usepackage{amsmath}
+\usepackage{emoji}
+
+\usepackage{enumitem}
+
+\usepackage[hidelinks]{hyperref}
+
+
+\usepackage{listings}
+\usepackage{xcolor}
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize\linespread{0.1},
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2,
+}
+
+\lstset{style=mystyle}
+
+\usepackage{setspace} % to change line spacing
+\renewcommand{\baselinestretch}{1.5} 
+
+
+\setlength{\parskip}{\baselineskip}%
+\setlength{\parindent}{0pt}%
+
+\begin{document}
+
+\makeatletter
+\begin{titlepage}
+\begin{center}
+    
+\includegraphics[width=7cm]{assets/LogoCN_Q.png}
+\\
+\textbf{\large{Centrale Nantes}}
+\\[2cm]
+
+\textbf{\large{MAC : $2^{nd}$ Lab's Report \\
+Getting started with GPIOs}}
+\\[14pt]
+$1^{st}$ year Embedded Systems Engineering
+\\[2cm]
+
+
+\vfill
+
+\textbf{By} \\
+EL KHAYDER Zakaria \\
+SAOUTI Rayan
+\\[1cm]
+
+\textbf{Professor} \\
+BRIDAY Mikael
+\\[3cm]
+
+
+November 26, 2023 \\ [12pt]
+
+Session \\
+2023-2024 \\[12pt]
+\small{Made with \LaTeX}
+\end{center}
+\end{titlepage}
+\makeatother
+
+\pagebreak
+
+\setcounter{page}{1}
+\pagenumbering{Roman}
+
+\clearpage
+\addcontentsline{toc}{section}{Contents}
+\tableofcontents
+
+\clearpage
+\addcontentsline{toc}{section}{List of Tables}
+\listoftables
+\addcontentsline{toc}{section}{Listings}
+\lstlistoflistings
+
+\clearpage
+
+\setcounter{page}{1}
+\pagenumbering{arabic}
+
+\section{Driving an LED}
+
+\subsection{Simple enough, right?}
+
+Well, yes and no!
+
+We are all used to Arduino, it is mostly the first-ever microcontroller we have used, and there is a strong reason why that is the case: Arduino provides a very simple and easy API to control the hardware, such as \verb|digitalWrite|, \verb|digitalRead| and \verb|pinMode|. Such simple APIs do not come with STM32 out-of-the-box, instead, we have to directly mutate the value of specific memory locations to change the behavior of our controller.
+
+So what should we do? Easy, we build our own ease-of-life utilities!
+
+\subsection{Taking it a level-higher}
+We can create the three functions \verb|digitalRead|, \verb|digitalWrite|, and \verb|pinMode| ourselves, and thankfully, they were already provided \emoji{smile}.
+
+\subsection{Hello, LED!}
+The next program is basically \verb|Hello, World!| for micro-controllers, we are gonna make an LED blink! Yes, very exciting, We know \emoji{joy}.
+
+\begin{lstlisting}[language=C++, caption={Blinking LED}]
+// This is the original Code provided with the project boilerplate
+
+#include "stm32f3xx.h"
+#include "pinAccess.h"
+
+void wait() {
+  volatile int i = 0;
+  for (i = 0; i < 2000000; i++)
+    ;
+}
+
+void setup() {
+  pinMode(GPIOB,3, OUTPUT);
+}
+
+int main(void) {
+  setup();
+  while (1) {
+    digitalWrite(GPIOB,3,1);
+    wait();
+    digitalWrite(GPIOB,3,0);
+    wait();
+  }
+}
+\end{lstlisting}
+
+Given we still haven't looked into STM32 internal timers and clock, we just use a loop to waste some of the CPU processing time, hence delaying the next code execution. This solution is neither efficient nor precise, but for now, it gets the job done.
+
+\subsection{Hello... Button?}
+
+Now, we will try to instead of just toggling the LED on and off, make it controlled by a push button.
+
+Let's start with something easy, like turning it on when we click the button, and off when we release it.
+
+Thanks to our \verb|pinAccess.h| library, which defines a lot of functions that make our life easier, one of them is \verb|digitalRead|, which simplifies - as the name suggests - reading from a digital input pin.
+
+Reading an input value is as simple as writing this single line of code:
+
+\begin{lstlisting}[language=C++]
+    int value = digitalRead(_port, _pin);
+\end{lstlisting}
+
+But not that fast bud... We have to tell the CPU that the corresponding pin in the corresponding port is an input, and if required, if it needs a pull-up or pull-down resistor. \\
+Thankfully, this is also easy thanks to \verb|pinAccess.h|, our lord and savior.
+
+\begin{lstlisting}[language=C++]
+    pinMode(GPIOB, 1, INPUT_PULLUP);
+\end{lstlisting}
+
+In this example, we declare that the second pin of port B (PB1) is an input, with a pull-up resistor.
+
+Given the button has a pull-up resistor, meaning it is using active low-logic, so if we need to check if the button is clicked, we need to invert the \verb|digitalRead| return value.
+
+\subsection{A very cool trick}
+
+We can take advantage of C++ macro compiler substitution to clean a bit of our code, using \#define directives.
+
+\begin{multicols}{2}
+\begin{lstlisting}[language=C++]
+    #define Button GPIOB, 1
+    pinMode(Button, INPUT_PULLUP);
+\end{lstlisting}
+
+\begin{lstlisting}[language=C++]
+    
+    pinMode(GPIOB, 1, INPUT_PULLUP);
+\end{lstlisting}
+\end{multicols}
+
+The two chunks of code above are literally equivalent once the compiler goes through macro substitution. 
+
+We can clearly notice that the code on the left is much cleaner, scalable, and understandable than the one on the right.
+
+\subsection{Maybe light up the LED now?}
+
+Ok, Ok... Chill man, We are on it.
+
+We already have our building blocks, the only thing left is putting them together.
+
+\begin{lstlisting}[language=C++, caption={Simple LED}]
+    #include "stm32f3xx.h"
+    #include "pinAccess.h"
+
+    #define LED GPIOB, 3
+    #define Button GPIOB, 1
+
+    void main(void) {
+        pinMode(Button, INPUT_PULLUP);
+        pinMode(LED, OUTPUT);
+
+        while(1) {
+            digitalWrite(LED, !digitalRead(Button));
+        }
+    }
+\end{lstlisting}
+
+Simple, right? It is almost magical!
+
+\subsection{Making it bistable}
+
+Yeah, yeah, our code works and all, but wouldn't it be cooler if we could instead of turning on the LED when we push, to be able to toggle it on/off instead? So let's do that.
+
+We are too lazy and already too late to explain how the system works, \textbf{understanding it is left as an exercise for the reader}.
+
+We will be using multiple buttons in the next chapter, so while we are here, we might as well encapsulate the button logic inside a single class that we can reuse.
+
+\begin{lstlisting}[language=C++, caption={Button class}]
+class Button
+{
+    enum State
+    {
+        RELEASED,
+        PUSHING,
+        PUSHED,
+        RELEASING
+    };
+
+public:
+    Button(GPIO_TypeDef *port, unsigned char pin) : _port(port),
+                                                    _pin(pin)
+    {
+        pinMode(_port, _pin, INPUT_PULLUP);
+    }
+
+    void Update()
+    {
+        int value = digitalRead(_port, _pin);
+
+        switch (_state)
+        {
+        case RELEASED:
+            if (value == 0)
+            {
+                _state = PUSHING;
+            }
+            break;
+
+        case PUSHING:
+            _state = PUSHED;
+            break;
+
+        case PUSHED:
+            if (value == 1)
+            {
+                _state = RELEASING;
+            }
+            break;
+
+        case RELEASING:
+            _state = RELEASED;
+            break;
+
+        default:
+            break;
+        }
+    }
+
+    int JustClicked()
+    {
+        return _state == PUSHING;
+    }
+
+private:
+    GPIO_TypeDef *_port;
+    unsigned char _pin;
+
+    State _state = State::RELEASED;
+};
+\end{lstlisting}
+
+The \verb|JustClicked| function will return true on the falling edge (not really), helping us detect when the button was just clicked, and run the code a single time.
+
+Now the only thing left is to inset our newly crafted wisdom into our existing code.
+
+\begin{lstlisting}[language=C++, caption={Bistable LED control}]
+    #include "stm32f3xx.h"
+    #include "pinAccess.h"
+
+    #define LED GPIOB, 3
+    #define ButtonInput GPIOB, 1
+
+    /* Button class definition (redacted to save vertical space) */
+    
+    void main(void) {
+        pinMode(LED, OUTPUT);
+        Button button(ButtonInput); // Class constructor takes care of pinMode
+
+        int ledState = 0;
+
+        while(1) {
+            if(button.JustClicked())
+                ledState = !ledState;
+        
+            digitalWrite(LED, ledState);
+        }
+    }
+\end{lstlisting}
+
+\section{Charlieplexing}
+
+In this chapter, we won't get into how Charlieplexing works. The most explanation provided is gonna be the next truth table. The reader is expected to do his own research (it is not very complicated already).
+
+\subsection{Truth Table}
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{|c|c|c|c|c|c||c|c|c|} \hline 
+         $L_0$&  $L_1$&  $L_2$&  $L_3$&  $L_4$&  $L_5$& $CH_0$&  $CH_1$&  $CH_2$\\ \hline \hline 
+         1&  0&  0&  0&  0&  0&  1&  0&  Z\\ \hline
+         0&  1&  0&  0&  0&  0&  0&  1&  Z\\ \hline
+         0&  0&  1&  0&  0&  0&  Z&  1&  0\\ \hline
+         0&  0&  0&  1&  0&  0&  Z&  0&  1\\ \hline
+         0&  0&  0&  0&  1&  0&  1&  Z&  0\\ \hline
+         0&  0&  0&  0&  0&  1&  0&  Z&  1\\ \hline
+    \end{tabular}
+    \caption{6 LEDs Charlieplexing Truth Table}
+\end{table}
+
+\subsection{Driving a single led}
+We can write a function that lights up an LED given its index (from 0 to 5). We already put down the truth table above, the only thing left is translating it to C++ code.
+
+\begin{lstlisting}[language=C++, caption={Charlieplexing a single LED}]
+#define CH0 GPIOB, 7
+#define CH1 GPIOF, 0
+#define CH2 GPIOF, 1
+
+int setLed(int id)
+{
+    if (id > 5) // Verify input
+        return -1;
+
+    switch (id)
+    {
+    case 0:
+        // CH0
+        pinMode(CH0, OUTPUT);
+        digitalWrite(CH0, 1);
+        // CH1
+        pinMode(CH1, OUTPUT);
+        digitalWrite(CH1, 0);
+        // CH2
+        pinMode(CH2, INPUT);
+        break;
+
+    case 1:
+        // CH0
+        pinMode(CH0, OUTPUT);
+        digitalWrite(CH0, 0);
+        // CH1
+        pinMode(CH1, OUTPUT);
+        digitalWrite(CH1, 1);
+        // CH2
+        pinMode(CH2, INPUT);
+        break;
+
+    case 2:
+        // CH0
+        pinMode(CH0, INPUT);
+        // CH1
+        pinMode(CH1, OUTPUT);
+        digitalWrite(CH1, 1);
+        // CH2
+        pinMode(CH2, OUTPUT);
+        digitalWrite(CH2, 0);
+        break;
+
+    case 3:
+        // CH0
+        pinMode(CH0, INPUT);
+        // CH1
+        pinMode(CH1, OUTPUT);
+        digitalWrite(CH1, 0);
+        // CH2
+        pinMode(CH2, OUTPUT);
+        digitalWrite(CH2, 1);
+        break;
+
+    case 4:
+        // CH0
+        pinMode(CH0, OUTPUT);
+        digitalWrite(CH0, 1);
+        // CH1
+        pinMode(CH1, INPUT);
+        // CH2
+        pinMode(CH2, OUTPUT);
+        digitalWrite(CH2, 0);
+        break;
+
+    case 5:
+        // CH0
+        pinMode(CH0, OUTPUT);
+        digitalWrite(CH0, 0);
+        // CH1
+        pinMode(CH1, INPUT);
+        // CH2
+        pinMode(CH2, OUTPUT);
+        digitalWrite(CH2, 1);
+        break;
+    }
+
+    return 0;
+}
+\end{lstlisting}
+
+\subsection{Driving the whole set of LEDs}
+We can create a function that will take a 6-bit mask as input (can't have only 6 bits, so we will take a full byte) and light up each LED where there is a 1 in its corresponding bit.
+
+Actually, this is very simple to implement, we only have to loop from 0 to 5 (included) and check the bit in that index using masking operations.
+
+\begin{lstlisting}[language=C++, caption={Charlieplexing with a mask}]
+void charlieplexing(uint8_t mask)
+{
+    for (uint8_t i = 0; i < 6; i++)
+    {
+        if (mask & (1U << i))
+            setLed(I);
+            // Adding a slight delay to make the LEDs light brighter
+            volatile int j = 0;
+            for (j = 0; j < 1000; j++);
+    }
+}
+\end{lstlisting}
+
+\subsection{Going a step further. More Buttons!}
+
+We can create a simple program that lights all the LEDs except one, and we can change the position of the turned off led right or left by clicking on one of the two buttons:
+\begin{itemize}
+    \item shift the led off to the left when we push the button D5
+    \item shift the led off to the right when we push the button D6
+\end{itemize}
+
+\begin{lstlisting}[language=C++, caption={The LED game}]
+//... The rest of the code, redacted to save space
+
+int main(void)
+{
+    Button rightButton(ButtonRight), leftButton(ButtonLeft);
+
+    uint8_t shift = 0;
+
+    while (1)
+    {
+        rightButton.Update();
+        leftButton.Update();
+
+        if (rightButton.JustClicked())
+        {
+            if (shift == 5)
+            {
+                shift = 0;
+            }
+            else
+            {
+                shift++;
+            }
+        }
+        else if (leftButton.JustClicked())
+        {
+            if (shift == 0)
+            {
+                shift = 5;
+            }
+            else
+            {
+                shift--;
+            }
+        }
+
+        charlieplexing(0xFF & ~(1 << shift));
+    }
+}
+\end{lstlisting}
+
+\section*{Resources}
+\addcontentsline{toc}{section}{Resources}
+The code files, and this report's source code, are available on this GitHub repository: \href{https://github.com/elkhayder/sec1-tp-mac}{elkhayder/sec1-tp-mac} 
+
+\end{document}
