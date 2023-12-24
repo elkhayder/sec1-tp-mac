@@ -1,0 +1,381 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{graphicx} % Required for inserting images
+\usepackage{float} % For figures placement
+\usepackage{fancyvrb} % for \Verb
+\usepackage[a4paper, margin=2.5cm]{geometry}
+\usepackage{karnaugh-map} % Tableau de Karnaugh
+% Subfigures
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{multicol}
+
+\usepackage{amsmath}
+\usepackage{emoji}
+
+\usepackage{enumitem}
+
+\usepackage[hidelinks]{hyperref}
+
+
+\usepackage{listings}
+\usepackage{xcolor}
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize\linespread{0.1},
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2,
+}
+
+\newcommand{\lstbg}[3][0pt]{{\fboxsep#1\colorbox{#2}{\strut #3}}}
+% \lstdefinelanguage{diff}{
+%   basicstyle=mystyle,
+%   morecomment=[f][\lstbg{red!20}]-,
+%   morecomment=[f][\lstbg{green!20}]+,
+%   morecomment=[f][\textit]{@@},
+%   %morecomment=[f][\textit]{---},
+%   %morecomment=[f][\textit]{+++},
+% }
+
+\lstset{
+    language=C++,
+    style=mystyle,
+}
+
+\usepackage{setspace} % to change line spacing
+\renewcommand{\baselinestretch}{1.5} 
+
+
+\setlength{\parskip}{\baselineskip}%
+\setlength{\parindent}{0pt}%
+
+\begin{document}
+
+\makeatletter
+\begin{titlepage}
+\begin{center}
+    
+\includegraphics[width=7cm]{assets/LogoCN_Q.png}
+\\
+\textbf{\large{Centrale Nantes}}
+\\[2cm]
+
+\textbf{\large{MAC : $5^{th}$ Lab's Report \\
+Interrupts --- Ultrasonic sensor }}
+\\[14pt]
+$1^{st}$ year Embedded Systems Engineering
+\\[2cm]
+
+
+\vfill
+
+\textbf{By} \\
+EL KHAYDER Zakaria \\
+SAOUTI Rayan
+\\[1cm]
+
+\textbf{Professor} \\
+BRIDAY Mikael
+\\[3cm]
+
+
+December 24, 2023 \\ [12pt]
+
+Session \\
+2023-2024 \\[12pt]
+\small{Made with \LaTeX}
+\end{center}
+\end{titlepage}
+\makeatother
+
+\pagebreak
+
+\setcounter{page}{1}
+\pagenumbering{Roman}
+
+\clearpage
+\addcontentsline{toc}{section}{Contents}
+\tableofcontents
+
+\clearpage
+\addcontentsline{toc}{section}{Listings}
+\lstlistoflistings
+
+\clearpage
+
+\setcounter{page}{1}
+\pagenumbering{arabic}
+
+\section{Trigger Signal}
+
+\subsection{Timer}
+
+We should set up one of the internal \verb|STM32| timers as an internal interrupt. We chose to use \verb|TIM6| for that.
+
+\begin{lstlisting}[language=C++, caption={TIM6 Configuration}]
+void setup()
+{
+    // input clock = 64MHz.
+    RCC->APB1ENR |= RCC_APB1ENR_TIM6EN | RCC_APB1ENR_TIM7EN;
+    // reset peripheral (mandatory!)
+    RCC->APB1RSTR |= RCC_APB1RSTR_TIM6RST | RCC_APB1RSTR_TIM7RST;
+    RCC->APB1RSTR &= ~(RCC_APB1RSTR_TIM6RST | RCC_APB1RSTR_TIM7RST);
+
+    // Configure timer
+    TIM6->CNT = 0; // Reset counter
+    TIM6->SR = 0; // Reset status register
+    TIM6->PSC = 64000 - 1; // Prescaler: 64K => F = 1K => T = 1ms
+    TIM6->ARR = 100 - 1; // 100ms
+    TIM6->CR1 |= TIM_CR1_CEN; // Tiemr enable
+}
+\end{lstlisting}
+
+\subsection{Interrupt Configuration}
+
+\begin{lstlisting}[language=C++, caption={TIM6 Interrupt enable}]
+void setup() {
+    ...
+
+    // enable interrupt
+    TIM6->DIER |= TIM_DIER_UIE;
+    NVIC_EnableIRQ(TIM6_DAC1_IRQn);
+}
+\end{lstlisting}
+
+\subsection{Interrupt Handler: Trigger signal generation}
+
+Whenever we get a \verb|TIM6| interrupt (each 100ms), we should send a 10$\mu$s HIGH signal in the \verb|TRIG_ECHO| pin. Since the \verb|TRIG_ECHO| serves both as an input and an output for our ultrasonic sensor, we should set the pin to output at the beginning of our interrupt handler, and then flip it back to output so we can read the echo signal from the sensor.
+
+To handle our \verb|TIM6| interrupt, we should declare a function with exactly \verb|TIM6_DAC1_IRQHandler| as a name, but given we are using C++ as our programming language and not C, we have to be careful of name mangling, hence declaring our interrupt handlers as external C functions using \verb|extern "C"|
+
+\begin{lstlisting}[language=C++, caption={TIM6 Interrupt handler: Trig signal generation}]
+extern "C" void TIM6_DAC1_IRQHandler(void)
+{
+    pinMode(TRIG_ECHO, OUTPUT); // Set pin as OUTPUT
+
+    digitalWrite(TRIG_ECHO, 1); // Set HIGH
+    for (volatile int i = 0; i < 50; i++); //  A short delay (we measured around 12us)
+    digitalWrite(TRIG_ECHO, 0); // Set LOW
+
+    pinMode(TRIG_ECHO, INPUT); // Set the pin back to input
+
+    TIM6->SR &= ~TIM_SR_UIF; // acknowledge
+}   
+\end{lstlisting}
+
+\section{Echo signal}
+
+\subsection{Theory}
+
+Once the ultrasonic sensor has emitted the ultrasonic burst, it will set the \verb|Echo| signal to HIGH until it receives back the signal it generated, and then it sets \verb|Echo| signal back to LOW. The measured time between the Rising and the Falling edges is how long the ultrasonic burst took to travel back and forth ($2d$).
+
+Given the ultrasonic burst travels at the speed of sound $s \approx 343 m/s$ (at 20 °C), we can pretty accurately estimate the distance between the object and the sensor up to $\pm$ 2cm.
+
+We will be using \verb|TIM7| with a resolution of 1 $\mu$s
+
+\begin{alignat*}{2}
+s _\textsm{(m/s)} = \frac{2d _\textsm{(m)}}{t _\textsm{(s)}}
+&\Rightarrow d _\textsm{(m)} &&= \frac{s _\textif{(m)} \cdot t _\textif{(s)}}{2} \\
+& &&= \frac{343 _\textsm{(m/s)}}{2} \cdot t \\ 
+& &&= 171.5 _\textsm{(m/s)} \cdot t _\textsm{(s)} \\
+&\Rightarrow d _\textsm{(cm)} &&= 171.5 _\textsm{(m/s)} \cdot \frac{10^2 _\textsm{(cm/m)}}{10^6 _\textsm{(\mu s/s)}} \cdot t _\textsm{(\mu s)} \\
+& &&= 0.01715 _\textsm{(cm/\mu s)} \cdot t _\textsm{(\mu s)} \\
+& && \approx \frac{t _\textsm{(\mu s)}}{58 _\textsm{(\mu s/cm)}}
+\end{alignat*}
+
+\subsection{Setup}
+
+\subsubsection{Timer}
+
+\begin{lstlisting}[language=C++, caption={TIM7 Config}]
+void setup() {
+    ...
+
+    // Configure timer
+    TIM7->CNT = 0; // Reset Counter
+    TIM7->SR = 0; // Reset status register
+    TIM7->PSC = 64 - 1; // Prescaler: 64 => F = 1Mhz => T = 1us
+    TIM7->ARR = 50000 - 1; // 50ms (will come in handy later)
+    TIM7->CR1 |= TIM_CR1_CEN;
+}
+\end{lstlisting}
+
+\subsubsection{External Interrupt}
+
+Thanks to the provided function helpers, configuring external interrupts is easy.
+
+We attach an external interrupt to \verb|TRIG_ECHO| pin on each \verb|CHANGE| (rising and falling edges)
+
+\begin{lstlisting}[language=C++, caption={Echo interrupt setup}]
+void setup() {
+    ...
+
+    EXTI->IMR |= EXTI_IMR_MR10;
+    attachInterrupt(TRIG_ECHO, CHANGE);
+}
+\end{lstlisting}
+
+Since we are using the same pin for both \verb|Trig| and \verb|Echo|, and we are listening to changes on this pin now, this means that whenever we manipulate the pin for the \verb|Trig| signal, we will get an interrupt because we change its state. We need to update the previous \verb|Trig| signal generation code to disable the External interrupts on this pin before sending the signal, and then re-enabling it.
+
+\begin{lstlisting}[language=C++, caption={TIM6 Interrupt handler --- Updated}]
+extern "C" void TIM6_DAC1_IRQHandler(void)
+{
+    EXTI->IMR &= ~EXTI_IMR_MR10; // Disable pin 10 external interrupt
+
+    ...
+    
+    EXTI->IMR |= EXTI_IMR_MR10; // Re-enable pin 10 external interrupts
+
+    TIM6->SR &= ~TIM_SR_UIF; // acknowledge
+}   
+\end{lstlisting}
+
+\subsection{Interrupt handler}
+
+Whenever we get an external interrupt from \verb|Echo| pin, we have to determine whether it is a rising or falling edge:
+\begin{itemize}
+    \item Rising: We reset the TIM7 counter
+    \item Falling: We save the current TIM7 counter value in a global variable that we can access later on to calculate the distance using the previous equation.
+\end{itemize}
+
+
+\begin{lstlisting}[language=C++, caption={Echo interrupt handler}]
+volatile uint32_t dt_us = 0; // Let's not forget the volatile keyword so that the compiler does not do anything funny
+
+extern "C" void EXTI15_10_IRQHandler(void)
+{
+    if (digitalRead(TRIG_ECHO) == 1) // Rizing edge
+        TIM7->CNT = 0; // Reset
+    else // Falling edge
+        dt_us = TIM7->CNT; // Save
+
+    EXTI->PR |= EXTI_PR_PR15; // acknowledge
+}
+\end{lstlisting}
+
+\section{Interface}
+
+Now that we have all the parts that we need, maybe we should display it to the user, you know... the purpose of this device?
+
+We can use the functions already provided by \verb|tft.h| to manipulate the display and draw the bar graph.
+
+\begin{lstlisting}[language=C++, caption={Main loop}]
+int main(void)
+{
+    setup();
+    Tft.setup();
+
+    while(1) {
+        Tft.erase();
+    
+        uint32_t distance = dt_us / 58; // cm
+
+        const int16_t MAX_HEIGHT = Tft.height() - 20,
+                      MIN_HEIGHT = 4,
+                      MAX_DISTANCE = 100,
+                      MIN_DISTANCE = 2;
+
+        float per = (float)distance / (float)(MAX_DISTANCE - MIN_DISTANCE);
+
+        if (per > 1)
+            per = 1;
+
+        int16_t height = MIN_HEIGHT + (float)(MAX_HEIGHT - MIN_HEIGHT) * per;
+
+        Tft.fillRect(
+            Tft.width() / 2 - 25,
+            MAX_HEIGHT - height,
+            50,
+            height,
+            ST7735_BLUE * (1 - per) + ST7735_RED * per);
+
+        Tft.setTextCursor(3, 80);
+        Tft.print("Distance: ");
+        Tft.print(distance);
+        Tft.println(" cm");
+
+        for (volatile int i = 0; i < 2000000; i++); // Delay
+    }
+}
+\end{lstlisting}
+
+\section{Robustness}
+
+The last part is adding a mechanism to detect if the sensor is present or not. For this, we will start a 50ms timer whenever we send a \verb|Trig| signal. If the duration elapses without receiving any response, we assume that the sensor is unavailable (disconnected or broken).
+
+We can use the \verb|TIM7| that we already use to get the travel time. If you can remember, we have already configured its \verb|ARR| register to 50ms, the only thing left now is to enable an interrupt on it and handle it.
+
+Whenever we send a \verb|Trig| signal, we should enable the timer, and disable it on the first \verb|Echo| pin state change. The code will be something like this.
+
+\begin{lstlisting}[language=C++, caption={Sensor availability checker}]
+volatile bool unavailable = false;
+
+extern "C" void TIM6_DAC1_IRQHandler(void) {
+    ...
+
+    // Enable 7 interrupt
+    TIM7->DIER |= TIM_DIER_UIE;
+    NVIC_EnableIRQ(TIM7_DAC2_IRQn);
+    TIM7->CNT = 0;
+}
+
+extern "C" void EXTI15_10_IRQHandler(void)
+{
+    TIM7->DIER &= ~TIM_DIER_UIE;
+    NVIC_DisableIRQ(TIM7_DAC2_IRQn);
+    unavailable = false;
+
+    ...
+}
+
+extern "C" void TIM7_DAC2_IRQHandler(void)
+{
+    unavailable = true;
+    TIM7->CNT = 0;
+
+    // acknowledge
+    TIM7->SR &= ~TIM_SR_UIF;
+}
+
+int main(void) {
+    ...
+
+    while(1) {
+        Tft.erase();
+
+        if (unavailable) {
+            Tft.setTextCursor(1, 1);
+            Tft.println("Sensor unavailable");
+        } else {
+            ...
+        }
+    }
+}
+\end{lstlisting}
+
+\section*{Resources}
+\addcontentsline{toc}{section}{Resources}
+The code files, and this report's source code, are available on this GitHub repository: \href{https://github.com/elkhayder/sec1-tp-mac}{elkhayder/sec1-tp-mac} 
+
+\end{document}
+
+\end{document}
+ 
