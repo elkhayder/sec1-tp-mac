@@ -1,7 +1,0 @@
-/home/elkhayder/sec1-tp-mac/lab6/build/CMakeFiles/lab6.dir
-/home/elkhayder/sec1-tp-mac/lab6/build/CMakeFiles/bin.dir
-/home/elkhayder/sec1-tp-mac/lab6/build/CMakeFiles/flash.dir
-/home/elkhayder/sec1-tp-mac/lab6/build/CMakeFiles/qemu-run.dir
-/home/elkhayder/sec1-tp-mac/lab6/build/CMakeFiles/qemu-gdb.dir
-/home/elkhayder/sec1-tp-mac/lab6/build/CMakeFiles/edit_cache.dir
-/home/elkhayder/sec1-tp-mac/lab6/build/CMakeFiles/rebuild_cache.dir
