@@ -7,7 +7,8 @@
 // MOSI: PB5 (AF5)  - Arduino D11
 // MISO: PB4 (AF5)  - Arduino D12
 // SCK : PB3 (AF5)  - Arduino D13
-void setupSPI() {
+void setupSPI()
+{
   // 1 - input clock = 64MHz.
   RCC->APB2ENR |= RCC_APB2ENR_SPI1EN;
   __asm__("nop");
@@ -18,7 +19,7 @@ void setupSPI() {
   // 2 - GPIOs
   RCC->AHBENR |= RCC_AHBENR_GPIOAEN | // clock for GPIOA
                  RCC_AHBENR_GPIOBEN;  // clock for GPIOB
-  __asm__("nop");                         // wait until GPIOx clock is Ok.
+  __asm__("nop");                     // wait until GPIOx clock is Ok.
   GPIOB->OSPEEDR = 3 << GPIO_OSPEEDER_OSPEEDR3_Pos |
                    3 << GPIO_OSPEEDER_OSPEEDR4_Pos |
                    3 << GPIO_OSPEEDER_OSPEEDR5_Pos;
@@ -33,17 +34,18 @@ void setupSPI() {
   GPIOB->PUPDR |= 1 << GPIO_PUPDR_PUPDR3_Pos | // pull-up...
                   1 << GPIO_PUPDR_PUPDR4_Pos | 1 << GPIO_PUPDR_PUPDR5_Pos;
   // 3 - Write the CR1 register
-  SPI1->CR1 = SPI_CR1_BR_1 | // fPCLK/8 => 8MHz (max 10MHz)
-                             // SPI_CR1_BR_2 |	//fPCLK/128 => 0.5MHz (tmp)
+  SPI1->CR1 = SPI_CR1_BR_1 |          // fPCLK/8 => 8MHz (max 10MHz)
+              SPI_CR1_BR_2 |          // fPCLK/128 => 0.5MHz (tmp)
               SPI_CR1_MSTR;           // master mode
   SPI1->CR2 = 0x7 << SPI_CR2_DS_Pos | // select 8 bits
               SPI_CR2_FRXTH |         // Fifo RX threshold 8-bits
               SPI_CR2_SSOE;
-  SPI1->CR1 |= SPI_CR1_SPE; // spi enabled
-  GPIOA->BSRR = GPIO_BSRR_BS_11 | GPIO_BSRR_BS_4 ; // set CS
+  SPI1->CR1 |= SPI_CR1_SPE;                       // spi enabled
+  GPIOA->BSRR = GPIO_BSRR_BS_11 | GPIO_BSRR_BS_4; // set CS
 }
 
-void beginTransaction() {
+void beginTransaction()
+{
   volatile uint16_t __attribute__((unused)) tmp;
   // while(SPI1->SR & SPI_SR_BSY);
   // while(SPI1->SR & SPI_SR_RXNE) //fifo not empty
@@ -51,7 +53,8 @@ void beginTransaction() {
   GPIOA->BSRR = GPIO_BSRR_BR_11; // CS=0
 }
 
-void endTransaction() {
+void endTransaction()
+{
   while (SPI1->SR & SPI_SR_BSY)
     ;
   GPIOA->BSRR = GPIO_BSRR_BS_11; // CS=1
@@ -62,7 +65,8 @@ void endTransaction() {
 // * send data
 // * be sure that transfer is complete
 // * and return the last value.
-uint8_t transfer8(uint8_t val) {
+uint8_t transfer8(uint8_t val)
+{
   volatile uint16_t __attribute__((unused)) tmp;
   volatile SPI_TypeDef *__attribute((unused)) spi = SPI1;
   while (SPI1->SR & SPI_SR_BSY)
@@ -79,10 +83,10 @@ uint8_t transfer8(uint8_t val) {
 // higher speed write transfer (than transfer8)
 // * wait until TX fifo is not full
 // * send data
-void write8(uint8_t val) {
+void write8(uint8_t val)
+{
   // Fifo tx level full?
   while (((SPI1->SR & SPI_SR_FTLVL_Msk) >> SPI_SR_FTLVL_Pos) == 3)
     ;
   *(__IO uint8_t *)&SPI1->DR = val;
 }
-
