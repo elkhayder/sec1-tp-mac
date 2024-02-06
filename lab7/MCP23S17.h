@@ -3,9 +3,13 @@
 
 #include "stm32f3xx.h"
 
+extern "C" void EXTI9_5_IRQHandler(void);
+
 class MCP23S17
 {
 public:
+    typedef void (*InterruptCallback)(void);
+
     enum class Port : uint8_t
     {
         A = 0x00,
@@ -17,6 +21,13 @@ public:
         Output = 0x00,
         Input = 0x01,
         Input_Pullup = 0x02,
+    };
+
+    enum class InterruptType
+    {
+        Rising,
+        Falling,
+        Both
     };
 
 private:
@@ -53,14 +64,30 @@ public:
     void pinMode(Port p, uint8_t idx, PinMode mode);
     void digitalWrite(Port p, uint8_t idx, bool value);
     bool digitalRead(Port p, uint8_t idx);
-
     uint8_t readBits(Port p);
+
+    void onInterrupt(void);
+
+    void attachInterrupt(Port p, uint8_t idx, InterruptType type, InterruptCallback callback);
 
 private:
     void _writeRegister(reg r, uint8_t val);
     uint8_t _readRegister(reg r);
     void _setBit(reg r, uint8_t idx);
     void _clearBit(reg r, uint8_t idx);
+
+    reg _getRelativeRegister(reg base, Port p);
+    uint8_t _getInterruptHandlerIndex(Port p, uint8_t idx);
+
+    // friend void EXTI1_IRQHandler(void);
+
+private:
+    struct Interrupt
+    {
+        bool enabled = false;
+        InterruptType type;
+        InterruptCallback callback = nullptr;
+    } _interrupts[16]; // 16 PINS (2 ports, 8 pins each)
 };
 
 extern MCP23S17 ioExt;
