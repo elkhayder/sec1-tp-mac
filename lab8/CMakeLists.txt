@@ -19,6 +19,8 @@ project(lab8)
 #application sources
 set(SRCS
 	${CMAKE_SOURCE_DIR}/main.cpp
+	${CMAKE_SOURCE_DIR}/serial.cpp
+	${CMAKE_SOURCE_DIR}/fifo.cpp
 )
 
 option(WITH_TFT "add compilation rules for the TFT support" ON)

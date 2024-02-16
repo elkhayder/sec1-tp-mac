@@ -1,13 +1,16 @@
 #include "stm32f3xx.h"
 #include "pinAccess.h"
+#include "tft.h"
 
-void serialSetup()
+#include "serial.h"
+
+void setup()
 {
     // input clock = 64MHz.
-    RCC->APB1ENR |= RCC_APB1ENR_USART2EN | RCC_APB1ENR_TIM6EN;
+    RCC->APB1ENR |= RCC_APB1ENR_TIM6EN;
     // reset peripheral (mandatory!)
-    RCC->APB1RSTR |= (RCC_APB1RSTR_USART2RST | RCC_APB1RSTR_TIM6RST);
-    RCC->APB1RSTR &= ~(RCC_APB1RSTR_USART2RST | RCC_APB1RSTR_TIM6RST);
+    RCC->APB1RSTR |= RCC_APB1RSTR_TIM6RST;
+    RCC->APB1RSTR &= ~RCC_APB1RSTR_TIM6RST;
 
     // Configure timer
     TIM6->CNT = 0;
@@ -16,80 +19,22 @@ void serialSetup()
     TIM6->ARR = 2000 - 1;  // 100ms
     TIM6->CR1 = 1;
 
-    /*  */
-    pinMode(GPIOA, 2, OUTPUT);
-    pinAlt(GPIOA, 2, 7);
-
-    /**
-     * With a frequency of 32MHz, to get a baud rate of 115200
-     * we need to divide by ~278
-     * 278 = 0x0116
-     */
-    USART2->BRR = 0x0116;
-    USART2->CR1 = USART_CR1_RE | USART_CR1_TE | USART_CR1_UE;
-
     // enable interrupt
     TIM6->DIER |= TIM_DIER_UIE;
     NVIC_EnableIRQ(TIM6_DAC1_IRQn);
 }
 
-void serialPrintChar(char c)
-{
-    USART2->TDR = c;
-
-    while (!(USART2->ISR & USART_ISR_TC))
-        ;
-}
-
-void serialPrintString(char *s)
-{
-    while (*s != '\0')
-        serialPrintChar(*s++);
-}
-
-void serialPrintInt(int n)
-{
-    int idx = 0, len = 0;
-    char buffer[10], reversed[12]; // MAX_INT = 2,147,483,647 (10 chars) + sign char + \0
-
-    if (n < 0)
-    {
-        reversed[idx++] = '-';
-        n = -n; // Remove minus sign
-    }
-
-    do
-    {
-        uint8_t ones = n % 10;
-        n /= 10;
-        buffer[len++] = '0' + ones;
-    } while (n != 0);
-
-    for (int i = len - 1; i >= 0; i--)
-    {
-        reversed[idx++] = buffer[i];
-    }
-    reversed[idx] = 0; // Null terminator
-
-    serialPrintString(reversed);
-}
-
 extern "C" void TIM6_DAC1_IRQHandler(void)
 {
-    char msg[] = "Hello, World!\n";
-    serialPrintString(msg);
-    serialPrintInt(100);
-    serialPrintChar('\n');
-    serialPrintInt(937103);
-    serialPrintChar('\n');
-    serialPrintInt(1094197483);
-    serialPrintChar('\n');
-    serialPrintInt(0);
-    serialPrintChar('\n');
-    serialPrintInt(-1094197483);
-    serialPrintChar('\n');
-    serialPrintInt(-487232425);
-    serialPrintChar('\n');
+    char msg[] = "Hello, World!";
+
+    Serial.println(msg);
+    Serial.println(100);
+    Serial.println(937103);
+    Serial.println(1094197483);
+    Serial.println(0);
+    Serial.println(-1094197483);
+    Serial.println(-487232425);
 
     // Acknowladge
     TIM6->SR &= ~TIM_SR_UIF;
@@ -97,9 +42,26 @@ extern "C" void TIM6_DAC1_IRQHandler(void)
 
 int main()
 {
-    serialSetup();
+    setup();
+    Tft.setup();
+    Serial.setup();
+
+    pinMode(GPIOB, 0, OUTPUT);
+
+    USART2->TDR = '\0';
 
     while (1)
     {
+
+        Tft.setTextCursor(1, 1);
+        Tft.eraseText(20);
+
+        Tft.print("Available: ");
+        Tft.println(Serial._buffer.size());
+
+        digitalToggle(GPIOB, 0);
+
+        for (volatile int x = 0; x < 10000000; x++)
+            ;
     }
 }

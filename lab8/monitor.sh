@@ -1,0 +1,1 @@
+picocom -b 115200 -d 8 -y n -p 1 --imap lfcrlf /dev/ttyACM0
