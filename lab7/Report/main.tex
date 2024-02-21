@@ -1,0 +1,631 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{graphicx} % Required for inserting images
+\usepackage{float} % For figures placement
+\usepackage{fancyvrb} % for \Verb
+\usepackage[a4paper, margin=2.5cm]{geometry}
+% Subfigures
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{multicol}
+\usepackage{geometry}
+
+\usepackage{amsmath}
+
+\usepackage[hidelinks]{hyperref}
+\usepackage{tikz-timing}[2017/12/20]
+
+
+\usepackage{listings}
+\usepackage{minted}
+\usepackage{xcolor} % to access the named colour LightGray
+\definecolor{LightGray}{gray}{0.93}
+\setminted{framesep=8mm}
+\setminted{baselinestretch=1.2}
+\setminted{bgcolor=LightGray}
+\setminted{fontsize=\footnotesize}
+\setminted{linenos}
+
+
+\usepackage{setspace} % to change line spacing
+\renewcommand{\baselinestretch}{1.5} 
+
+\setlength{\parskip}{\baselineskip}%
+\setlength{\parindent}{0pt}%
+
+\begin{document}
+
+\makeatletter
+\begin{titlepage}
+\begin{center}
+    
+\includegraphics[width=7cm]{assets/LogoCN_Q.png}
+\\
+\textbf{\large{Centrale Nantes}}
+\\[2cm]
+
+\textbf{\large{MAC : $7^{th}$ Lab's Report \\
+Driver For The I/O Expander MCP23S17 (SPI Interface) }}
+\\[14pt]
+$1^{st}$ year Embedded Systems Engineering
+\\[2cm]
+
+
+\vfill
+
+\textbf{By} \\
+EL KHAYDER Zakaria \\
+SAOUTI Rayan
+\\[1cm]
+
+\textbf{Professor} \\
+BRIDAY Mikael
+\\[3cm]
+
+
+February 12, 2023 \\ [12pt]
+
+Session \\
+2023-2024 \\[12pt]
+\small{Made with \LaTeX}
+\end{center}
+\end{titlepage}
+\makeatother
+
+\pagebreak
+
+\setcounter{page}{1}
+\pagenumbering{Roman}
+
+\clearpage
+\addcontentsline{toc}{section}{Contents}
+\tableofcontents
+
+\clearpage
+
+\addcontentsline{toc}{section}{Figures}
+\listoffigures
+\addcontentsline{toc}{section}{Listings}
+\listoflistings
+
+\clearpage
+
+\setcounter{page}{1}
+\pagenumbering{arabic}
+
+
+\section{SPI Communication}
+
+We have access to \verb|spi.h| that defines these functions:
+\begin{itemize}
+    \item \textbf{setupSPI}: To initiate and configure the STM32 dedicated SPI chip.
+    \item \textbf{beginTransaction}: Start an SPI transaction by lowering the CS pin (CS = 0).
+    \item \textbf{endTransaction}: To end the SPI transaction by waiting for all buffer data to be transmitted and then raising back the CS pin (CS = 1).
+    \item \textbf{transfer8}: Transfer 1 byte of data using SPI and return the response.
+\end{itemize}
+
+Thanks to these already-implemented functionalities, interfacing with the  MCP23S17 will be more about sending the correct data and less about configuring and handling the STM32 signals ourselves.
+
+\subsection{Read/Write}
+
+\begin{figure}[H]
+    \centerline{\begin{tikztimingtable}[
+        timing/dslope=0.4,
+        timing/.style={x=2ex,y=2ex},
+        x=5ex,
+        timing/rowdist=4ex,
+        timing/name/.style={font=\sffamily\scriptsize}]
+      SCK    & 50{C} \\
+      CS     & H 48L H \\
+      MOSI  & 
+            1U %
+            2D{0} 2D{1} 2D{0} 2D{0} 2D{0} 2D{0} 2D{0} 2D{1} %
+            2D{$R_7$} 2D{$R_6$} 2D{$R_5$} 2D{$R_4$} 2D{$R_3$} 2D{$R_2$} 2D{$R_1$} 2D{$R_0$} %
+            16U %
+            1U \\
+            & 1U 16D{OP Code = 0x41} 16D{Register Address} 17U \\
+      MISO  & 
+            1U 16U 16U %
+            2D{$D_7$} 2D{$D_6$} 2D{$D_5$} 2D{$D_4$} 2D{$D_3$} 2D{$D_2$} 2D{$D_1$} 2D{$D_0$} %
+            1U \\
+            & 1U 16U 16U 16D{Data} 1U \\
+    \end{tikztimingtable}}
+    \caption{SPI Transaction: Read}
+\end{figure}
+
+\begin{figure}[H]
+    \centerline{\begin{tikztimingtable}[
+        timing/dslope=0.4,
+        timing/.style={x=2ex,y=2ex},
+        x=5ex,
+        timing/rowdist=4ex,
+        timing/name/.style={font=\sffamily\scriptsize}]
+      SCK    & 50{C} \\
+      CS     & H 48L H \\
+      MOSI   & 
+        1U 2D{0} 2D{1} 2D{0} 2D{0} 2D{0} 2D{0} 2D{0} 2D{0} %
+        2D{$R_7$} 2D{$R_6$} 2D{$R_5$} 2D{$R_4$} 2D{$R_3$} 2D{$R_2$} 2D{$R_1$} 2D{$R_0$} %
+        2D{$D_7$} 2D{$D_6$} 2D{$D_5$} 2D{$D_4$} 2D{$D_3$} 2D{$D_2$} 2D{$D_1$} 2D{$D_0$} 1U \\
+         & 1U 16D{OP Code = 0x40} 16D{Register Address} 16D{Data} 1U \\
+      MISO   & 50U \\
+    \end{tikztimingtable}}
+    \caption{SPI Transaction: Write}
+\end{figure}
+
+
+\subsection{Register Manipulation}
+
+\subsubsection{Registers Enum}
+To avoid having to type register addresses by hand, which is both unreadable and error-prone, we chose to declare a \verb|reg| enum that holds the addresses of the 21 different internal registers of the MCP23S17 chip.
+
+\begin{listing}[H]
+\begin{minted}{cpp}
+enum class reg : uint8_t {
+    IODIRA   = 0x00, IODIRB   = 0x01,
+    IPOLA    = 0x02, IPOLB    = 0x03,
+    GPINTENA = 0x04, GPINTENB = 0x05,
+    DEFVALA  = 0x06, DEFVALB  = 0x07,
+    INTCONA  = 0x08, INTCONB  = 0x09,
+    IOCON1   = 0x0A, IOCON2   = 0x0B,
+    GPPUA    = 0x0C, GPPUB    = 0x0D,
+    INTFA    = 0x0E, INTFB    = 0x0F,
+    INTCAPA  = 0x10, INTCAPB  = 0x11,
+    IOA      = 0x12, IOB      = 0x13,
+    OLATA    = 0x14, OLATB    = 0x15,
+};
+\end{minted}
+\caption{Registers enum}
+\end{listing}
+
+\subsubsection{Write to register}
+
+We can build our custom register write function using the previously mentioned functions from \verb|spi.h|.
+
+We should cast \verb|reg| enum to \verb|uint8_t| since it is the only type accepted by \verb|transfer8|.
+
+
+\begin{listing}[H]
+\begin{minted}{cpp}
+void MCP23S17::_writeRegister(reg r, uint8_t val) {
+    beginTransaction();
+
+    transfer8(0x40); // 0b01000000
+    transfer8((uint8_t)r);
+    transfer8(val);
+
+    endTransaction();
+}
+\end{minted}
+\caption{Write to Register}
+\end{listing}
+
+\subsubsection{Read from register}
+
+For reading, besides sending both the OP code and the register address, we should send an extra byte so that we can read the data sent by MCP23S17.
+
+\begin{listing}[H]
+\begin{minted}{cpp}
+uint8_t MCP23S17::_readRegister(reg r) {
+    beginTransaction();
+
+    transfer8(0x41); // 0b01000001
+    transfer8((uint8_t)r);
+    uint8_t val = transfer8(0x00); // Get output
+
+    endTransaction();
+
+    return val;
+}
+\end{minted}
+\caption{Read from register}
+\end{listing}
+
+
+\subsection{Bit Manipulation}
+
+Flipping a single bit (set/reset) can be done in three steps:
+\begin{itemize}
+    \item Read the existing value
+    \item Modify the corresponding bits
+    \item Write the value back into the register
+\end{itemize}
+
+\begin{listing}[H]
+\begin{minted}{cpp}
+void MCP23S17::_setBit(reg r, uint8_t idx) {
+    uint8_t state = _readRegister(r);
+    _writeRegister(r, state | (0x01 << idx));
+}
+\end{minted}
+\caption{Bit Set}
+\end{listing}
+
+\begin{listing}[H]
+\begin{minted}{cpp}
+void MCP23S17::_clearBit(reg r, uint8_t idx) {
+    uint8_t state = _readRegister(r);
+    _writeRegister(r, state & ~(0x01 << idx));
+}
+\end{minted}
+\caption{Bit Clear}
+\end{listing}
+
+\section{MCP23S17 API}
+
+The functions defined in the previous section were not meant to be used by the user directly as they are private \verb|MCP23S17| class methods, rather, they will be used internally by the rest of the methods that we will be declaring, which are meant to be used by the user.
+
+We aim to provide functions similar to the \verb|Arduino| API:
+\begin{itemize}
+    \item \textbf{pinMode}: Output, Input, Input Pullup
+    \item \textbf{digitalRead}
+    \item \textbf{digitalWrite}
+    \item \textbf{attachInterrupt}: Rising, Falling, Both
+\end{itemize}
+
+\subsection{Easier register access}
+
+To simplify our API consumers' lives further, we can declare a \verb|Port| enum (A or B), and hide our previous \verb|reg| enum for internal use only.
+
+\begin{listing}[H]
+\begin{minted}{cpp}
+enum class Port : uint8_t {
+    A = 0x00,
+    B = 0x01,
+};
+\end{minted}
+\caption{Port enum}
+\end{listing}
+
+We will still use the \verb|reg| enum, although only half of it, to calculate the corresponding Register address for the specific port.
+
+This works wonders with the current register mapping we use (BANK 0) since the registers are only offset with a single address for each port.
+
+\begin{listing}[H]
+\begin{minted}{cpp}
+MCP23S17::reg MCP23S17::_getRelativeRegister(reg base, Port p) {
+    return static_cast<reg>(static_cast<uint8_t>(base) + static_cast<uint8_t>(p));
+}
+\end{minted}
+\caption{Relative Register}
+\end{listing}
+
+\subsection{Digital write}
+
+We can write an output on our MCP23S17 by setting the value to the corresponding \verb|GPIO| register
+
+\begin{listing}[H]
+\begin{minted}{cpp}
+void MCP23S17::digitalWrite(Port p, uint8_t idx, bool value) {
+    reg portRegister = _getRelativeRegister(reg::IOA, p);
+
+    if (value) _setBit(portRegister, idx); // 1
+    else _clearBit(portRegister, idx); // 0
+}
+\end{minted}
+\caption{digitalWrite}
+\end{listing}
+
+\subsection{Read port}
+
+\begin{listing}[H]
+\begin{minted}{cpp}
+uint8_t MCP23S17::readBits(Port p) {
+    return _readRegister(_getRelativeRegister(reg::IOA, p));
+}
+\end{minted}
+\caption{readBits}
+\end{listing}
+
+\subsection{Digital read}
+
+\begin{listing}[H]
+\begin{minted}{cpp}
+bool MCP23S17::digitalRead(Port p, uint8_t idx) {
+    return readBits(p) & (0x01 << idx);
+}
+\end{minted}
+\caption{digitalRead}
+\end{listing}
+
+\subsection{Pin mode}
+
+According to the MCP23S17 documentation, we should use the corresponding port \verb|IODIR| register. By setting the value of the corresponding bit to \verb|0| the pin would be an \verb|OUTPUT|, otherwise, if it is set to \verb|1|, the pin would be an \verb|INPUT|.
+
+To activate the pullup resistor for a specific pin, we have to set the corresponding bit on the corresponding port \verb|GPPU| register to \verb|1|.
+
+\begin{listing}[H]
+\begin{minted}{cpp}
+enum class PinMode { Output, Input, Input_Pullup };
+\end{minted}
+\caption{PinMode Enum}
+\end{listing}
+
+\begin{listing}[H]
+\begin{minted}{cpp}
+void MCP23S17::pinMode(Port p, uint8_t idx, PinMode mode) {
+    reg portIoRegister = _getRelativeRegister(reg::IODIRA, p);
+    reg portPullupRegister = _getRelativeRegister(reg::GPPUA, p);
+
+    switch (mode)
+    {
+    case PinMode::Output:
+        _clearBit(portIoRegister, idx);
+        break;
+
+    case PinMode::Input_Pullup:
+        _setBit(portPullupRegister, idx);
+        [[fallthrough]]; // Allowing fallthrough to set the pin as input
+        
+    case PinMode::Input:
+        _setBit(portIoRegister, idx);
+        break;
+    }
+}
+\end{minted}
+\caption{pinMode}
+\end{listing}
+
+\subsection{Interrupts}
+
+Interrupts are probably the most complicated part of our MCP23S17 API.
+
+We need to declare a custom \verb|Interrupt struct| where we can save the config (type and handler) for each interrupt.
+
+\begin{listing}[H]
+\begin{minted}{cpp}
+typedef void (*InterruptCallback)(void);
+
+struct Interrupt {
+    bool enabled = false;
+    InterruptType type;
+    InterruptCallback callback = nullptr;
+}
+\end{minted}
+\caption{Interrupt struct}
+\end{listing}
+
+\subsubsection{Interrupt config}
+
+\begin{listing}[H]
+\begin{minted}{cpp}
+enum class InterruptType { Rising, Falling, Both };
+\end{minted}
+\caption{Interrupt type}
+\end{listing}
+
+We reserve an array of size 16 and type \verb|Interrupt| where we can save our config for the different pins (8 pins per port = 16)
+
+\begin{minted}{cpp}
+struct Interrupt _interrupts[16];
+\end{minted}
+
+We will also need a helper function that returns an index for each port and pin (hashing if you like)
+\begin{listing}[H]
+\begin{minted}{cpp}
+uint8_t MCP23S17::_getInterruptHandlerIndex(Port p, uint8_t idx) {
+    return (uint8_t)p * 8 + idx;
+}
+\end{minted}
+\caption{\_getInterruptHandlerIndex}
+\end{listing}
+
+Now with that implemented, we can declare our \verb|attachInterrupt| function that will handle configuring the right register on our MCP23S17 and save the required info in the correct \verb|_interrupts| case.
+\begin{listing}[H]
+\begin{minted}{cpp}
+void MCP23S17::attachInterrupt(Port p, uint8_t idx, InterruptType type, InterruptCallback callback) {
+    _clearBit(_getRelativeRegister(reg::INTCONA, p), idx); // Edge interrupt (any)
+    _setBit(_getRelativeRegister(reg::GPINTENA, p), idx);  // Enable Interrupt
+
+    _interrupts[_getInterruptHandlerIndex(p, idx)].type = type;
+    _interrupts[_getInterruptHandlerIndex(p, idx)].enabled = true;
+    _interrupts[_getInterruptHandlerIndex(p, idx)].callback = callback;
+}
+\end{minted}
+\caption{\_getInterruptHandlerIndex}
+\end{listing}
+
+As you might notice, we cannot configure the interrupt on a specific edge directly on the MCP23S17, so we will have to handle the edge detection ourselves in our handler. Which makes a nice segue to our next chapter :)
+
+
+\subsubsection{Interrupt handler}
+
+When there is an interrupt in our MCP23S17, it will trigger an external interrupt in our STM32 uc, the external interrupt pin connected to the MCP23S17 is PA9.
+
+We need to first create an init function where we will set the SPI driver, zero out the \verb|_interrupts| array from whatever garbage existed before, and configure the interrupt on the PA9.
+
+\begin{listing}[H]
+\begin{minted}{cpp}
+void MCP23S17::Init() {
+    setupSPI(); // Setup SPI
+
+    for (uint16_t i = 0; i < sizeof(_interrupts) / sizeof(*_interrupts); i++) {
+        _interrupts[i].enabled = false;
+        _interrupts[i].callback = nullptr;
+    }
+
+    // Configure EXTI (PA9)
+    ::pinMode(GPIOA, 9, INPUT_PULLUP);
+    ::attachInterrupt(GPIOA, 9, FALLING);
+}
+\end{minted}
+\caption{MCP23S17::Init}
+\end{listing}
+
+In our interrupt handler, we will have to get the \verb|INTF| status register state and the \verb|INTCAP| state for both ports. With this information, we can determine if an interrupt occurred on a pin, and what type.
+\begin{listing}[H]
+\begin{minted}{cpp}
+void MCP23S17::onInterrupt(void) {
+    uint16_t interruptFlags = _readRegister(MCP23S17::reg::INTFB) << 8 
+                            | _readRegister(MCP23S17::reg::INTFA);
+    uint16_t state = _readRegister(reg::INTCAPB) << 8 | _readRegister(reg::INTCAPA);
+
+    for (int i = 0; i < 16; i++) {
+        uint16_t bit_Msk = 1 << i;
+        auto intr = &_interrupts[i];
+
+        // If there is no interrupt flag, or the interrupt is not enabled
+        if (!(interruptFlags & bit_Msk) || !intr->enabled)
+            continue;
+
+        // Any edge
+        if (intr->type == InterruptType::Both)
+            intr->callback();
+        // Falling Edge
+        else if (intr->type == InterruptType::Falling && !(state & bit_Msk))
+            intr->callback();
+        // Rising Edge
+        else if (intr->type == InterruptType::Rising && (state & bit_Msk))
+            intr->callback();
+    }
+}
+\end{minted}
+\caption{MCP23S17::onInterrupt}
+\end{listing}
+
+This function should be called on the actual PA9 interrupt handler \verb|EXTI9_5_IRQHandler|: 
+
+
+\begin{listing}[H]
+\begin{minted}{cpp}
+extern "C" void EXTI9_5_IRQHandler(void) {
+    ioExt.onInterrupt();
+    EXTI->PR |= EXTI_PR_PR9; // acknowledge
+}
+\end{minted}
+\caption{EXTI9\_5\_IRQHandler}
+\end{listing}
+
+With this implemented, we have officially implemented all the required and essential functions to facilitate the usage of the MCP23S17 external io expander.
+
+Our result class definition looks like this:
+\begin{listing}[H]
+\begin{minted}{cpp}
+class MCP23S17 {
+public:
+    typedef void (*InterruptCallback)(void);
+    enum class Port : uint8_t { ... };
+    enum class PinMode : uint8_t { ... };
+    enum class InterruptType { ... };
+
+private:
+    enum class reg : uint8_t { ... };
+
+public:
+    void Init();
+
+    void pinMode(Port p, uint8_t idx, PinMode mode);
+    void digitalWrite(Port p, uint8_t idx, bool value);
+    bool digitalRead(Port p, uint8_t idx);
+    uint8_t readBits(Port p);
+
+    void onInterrupt(void);
+
+    void attachInterrupt(Port p, uint8_t idx, InterruptType type, InterruptCallback callback);
+
+private:
+    void _writeRegister(reg r, uint8_t val);
+    uint8_t _readRegister(reg r);
+    void _setBit(reg r, uint8_t idx);
+    void _clearBit(reg r, uint8_t idx);
+
+    reg _getRelativeRegister(reg base, Port p);
+    uint8_t _getInterruptHandlerIndex(Port p, uint8_t idx);
+    
+private:
+    struct Interrupt {
+        bool enabled = false;
+        InterruptType type;
+        InterruptCallback callback = nullptr;
+    } _interrupts[16]; // 16 PINS (2 ports, 8 pins each)
+};
+
+extern MCP23S17 ioExt;
+\end{minted}
+\caption{EXTI9\_5\_IRQHandler}
+\end{listing}
+
+
+\section{Sample Application}
+
+Given the simplicity of our application thanks to our beautiful MCP23S17 API, we will not delve into the details of every nook and cranny of it.
+
+\newgeometry{top=1cm, bottom=2.5cm, left=2cm, right=2cm}
+
+\begin{listing}
+\begin{minted}{cpp}
+enum class Mode { Chaser, BlinkingAll, BlinkingOdd, BlinkingEven };
+volatile Mode mode = Mode::Chaser;
+
+void SetModeChaser() { mode = Mode::Chaser; }
+void SetModeBlinkingAll() { mode = Mode::BlinkingAll; }
+void SetModeBlinkingOdd() { mode = Mode::BlinkingOdd; }
+void SetModeBlinkingEven() { mode = Mode::BlinkingEven; }
+
+void ModeChaser() {
+    static int i = 0;
+    i++;
+    if (i > 7)  i = 0;
+    else if (i < 0) i = 7;
+
+    for (int j = 0; j < 8; j++) ioExt.digitalWrite(MCP23S17::Port::A, j, i == j);
+
+    for (volatile int x = 0; x < 500000; x++);
+}
+
+void ModeBlinking() {
+    static bool ledsAreOn = false;
+    ledsAreOn = !ledsAreOn;
+    uint8_t val;
+
+    switch (mode) {
+        case Mode::BlinkingAll:  val = 0xFF; break;
+        case Mode::BlinkingEven: val = 0xAA; break;
+        case Mode::BlinkingOdd:  val = 0x55; break;
+        default: break;
+    }
+
+    for (int i = 0; i < 8; i++) {
+        if (!ledsAreOn) ioExt.digitalWrite(MCP23S17::Port::A, i, 0);
+        else ioExt.digitalWrite(MCP23S17::Port::A, i, val & 1 << i);
+    }
+
+    for (volatile int x = 0; x < 1000000; x++);
+}
+
+void setup() {
+    ioExt.Init();
+
+    for (int i = 0; i < 8; i++) {
+        ioExt.pinMode(MCP23S17::Port::A, i, MCP23S17::PinMode::Output);
+        ioExt.pinMode(MCP23S17::Port::B, i, MCP23S17::PinMode::Input_Pullup);
+    }
+
+    ioExt.attachInterrupt(MCP23S17::Port::B, 4, MCP23S17::InterruptType::Rising, SetModeChaser);
+    ioExt.attachInterrupt(MCP23S17::Port::B, 5, MCP23S17::InterruptType::Rising, SetModeBlinkingAll);
+    ioExt.attachInterrupt(MCP23S17::Port::B, 6, MCP23S17::InterruptType::Rising, SetModeBlinkingOdd);
+    ioExt.attachInterrupt(MCP23S17::Port::B, 7, MCP23S17::InterruptType::Rising, SetModeBlinkingEven);
+}
+
+int main() {
+    setup();
+    while (1) {
+        switch (mode) {
+            case Mode::Chaser:   ModeChaser();   break;
+            default:             ModeBlinking(); break;
+        }
+    }
+}
+\end{minted}
+\caption{main.c}
+\end{listing}
+
+\restoregeometry
+
+\section*{Resources}
+\addcontentsline{toc}{section}{Resources}
+The code files, and this report's source code, are available on this GitHub repository: \href{https://github.com/elkhayder/sec1-tp-mac}{elkhayder/sec1-tp-mac} 
+
+\end{document}
+
+\end{document}
+ 

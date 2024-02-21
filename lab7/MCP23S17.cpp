@@ -29,7 +29,7 @@ extern "C" void EXTI9_5_IRQHandler(void)
 void MCP23S17::onInterrupt(void)
 {
     uint16_t interruptFlags = _readRegister(MCP23S17::reg::INTFB) << 8 | _readRegister(MCP23S17::reg::INTFA);
-    uint16_t previousValues = _readRegister(reg::INTCAPB) << 8 | _readRegister(reg::INTCAPA);
+    uint16_t state = _readRegister(reg::INTCAPB) << 8 | _readRegister(reg::INTCAPA);
 
     for (int i = 0; i < 16; i++)
     {
@@ -40,24 +40,18 @@ void MCP23S17::onInterrupt(void)
         if (!(interruptFlags & bit_Msk) || !intr->enabled)
             continue;
 
+        // Any edge
         if (intr->type == InterruptType::Both)
-        {
             intr->callback();
-        }
         // Falling Edge
-        else if (intr->type == InterruptType::Falling && !(previousValues & bit_Msk))
-        {
+        else if (intr->type == InterruptType::Falling && !(state & bit_Msk))
             intr->callback();
-        }
         // Rising Edge
-        else if (intr->type == InterruptType::Rising && (previousValues & bit_Msk))
-        {
+        else if (intr->type == InterruptType::Rising && (state & bit_Msk))
             intr->callback();
-        }
     }
 }
 
-// write to a MCP register , using spi .
 void MCP23S17::_writeRegister(reg r, uint8_t val)
 {
     beginTransaction();
@@ -97,19 +91,17 @@ void MCP23S17::_clearBit(reg r, uint8_t idx)
 
 void MCP23S17::digitalWrite(Port p, uint8_t idx, bool value)
 {
-    uint8_t portRegister = (uint8_t)reg::IOA + (uint8_t)p;
+    reg portRegister = _getRelativeRegister(reg::IOA, p);
 
     if (value)
-        _setBit((reg)portRegister, idx);
+        _setBit(portRegister, idx);
     else
-        _clearBit((reg)portRegister, idx);
+        _clearBit(portRegister, idx);
 }
 
 uint8_t MCP23S17::readBits(Port p)
 {
-    uint8_t portRegister = (uint8_t)reg::IOA + (uint8_t)p;
-
-    return _readRegister((reg)portRegister);
+    return _readRegister(_getRelativeRegister(reg::IOA, p));
 }
 
 bool MCP23S17::digitalRead(Port p, uint8_t idx)
@@ -119,21 +111,21 @@ bool MCP23S17::digitalRead(Port p, uint8_t idx)
 
 void MCP23S17::pinMode(Port p, uint8_t idx, PinMode mode)
 {
-    uint8_t portIoRegister = (uint8_t)reg::IODIRA + (uint8_t)p;
-    uint8_t portPullupRegister = (uint8_t)reg::GPPUA + (uint8_t)p;
+    reg portIoRegister = _getRelativeRegister(reg::IODIRA, p);
+    reg portPullupRegister = _getRelativeRegister(reg::GPPUA, p);
 
     switch (mode)
     {
     case PinMode::Output:
-        _clearBit((reg)portIoRegister, idx);
+        _clearBit(portIoRegister, idx);
         break;
 
     case PinMode::Input_Pullup:
-        _setBit((reg)portPullupRegister, idx);
+        _setBit(portPullupRegister, idx);
         // Allowing fallthrough to set the pin as input
         [[fallthrough]];
     case PinMode::Input:
-        _setBit((reg)portIoRegister, idx);
+        _setBit(portIoRegister, idx);
         break;
     }
 }

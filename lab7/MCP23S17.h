@@ -18,9 +18,9 @@ public:
 
     enum class PinMode : uint8_t
     {
-        Output = 0x00,
-        Input = 0x01,
-        Input_Pullup = 0x02,
+        Output,
+        Input,
+        Input_Pullup,
     };
 
     enum class InterruptType
@@ -58,7 +58,6 @@ private:
     };
 
 public:
-    MCP23S17() {}
     void Init();
 
     void pinMode(Port p, uint8_t idx, PinMode mode);
