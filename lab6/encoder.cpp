@@ -2,7 +2,7 @@
 #include "pinAccess.h"
 #include "exti.h"
 
-int _encoderValue = 0;
+static int _encoderValue = 0;
 
 void encoderInit(void)
 {

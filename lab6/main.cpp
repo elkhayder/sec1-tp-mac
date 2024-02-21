@@ -19,7 +19,7 @@ void setup()
     TIM6->CNT = 0;
     TIM6->SR = 0;
     TIM6->PSC = 64000 - 1; // 1ms
-    TIM6->ARR = 10 - 1;    // 50ms
+    TIM6->ARR = 10 - 1;    // 100ms
     TIM6->CR1 = 1;
 
     // enable interrupt
@@ -111,8 +111,9 @@ int main()
     int _prevSteps = _steps;
 
     Tft.print("Mode: ");
-    Tft.println(_mode == Mode::Manual ? "Manual    " : _mode == Mode::Transition ? "Transition"
-                                                                                 : "Scan      ");
+    Tft.println(_mode == Mode::Manual       ? "Manual    "
+                : _mode == Mode::Transition ? "Transition"
+                                            : "Scan      ");
 
     Tft.print("Read: ");
     Tft.print(encoderValue());
@@ -141,15 +142,15 @@ int main()
             Tft.eraseText(6);
 
             if (encoderValue() < 10)
-                Tft.print("0");
+                Tft.print("0"); // Left Padding
             Tft.print(encoderValue());
 
             Tft.print(" ");
 
             if (encoderValueInSteps() < 100)
-                Tft.print("0");
+                Tft.print("0"); // Left Padding
             if (encoderValueInSteps() < 10)
-                Tft.print("0");
+                Tft.print("0"); // Left Padding
             Tft.println(encoderValueInSteps());
 
             _prevEncoder = encoderValue();
@@ -161,9 +162,9 @@ int main()
             Tft.eraseText(3);
 
             if (_steps < 100)
-                Tft.print("0");
+                Tft.print("0"); // Left Padding
             if (_steps < 10)
-                Tft.print("0");
+                Tft.print("0"); // Left Padding
             Tft.println(_steps);
 
             _prevSteps = _steps;
@@ -172,4 +173,52 @@ int main()
         for (volatile int i = 0; i < 1000; i++)
             ;
     }
+}
+
+void setVoltage(uint32_t v);
+enum State
+{
+    Rising,
+    Waiting,
+    Falling
+};
+void fn()
+{
+    static State state = Rising;
+    static uint8_t count = 0;
+
+    const int risingFallingSteps = 5 / 0.1;                         // 50
+    const int waitingSteps = 1 / 0.1;                               // 10
+    const int voltageStepMv = 1000 * (22 - 2) / risingFallingSteps; // 400mv
+
+    if (state == Rising && count == risingFallingSteps)
+    {
+        state = Waiting;
+        count = 0;
+    }
+    else if (state == Rising && count == risingFallingSteps)
+    {
+        state = Rising;
+        count = 0;
+    }
+    else if (state == Waiting && count == waitingSteps)
+    {
+        state = Falling;
+        count = 0;
+    }
+
+    if (state == Rising)
+    {
+        setVoltage(2000 + count * voltageStepMv); // 2V + offset
+    }
+    else if (state == Waiting)
+    {
+        setVoltage(22000); // 22 V
+    }
+    else
+    { // if (state == Falling)
+        setVoltage(2000 + (risingFallingSteps - count) * voltageStepMv);
+    }
+
+    count++;
 }
